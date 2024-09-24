@@ -14,7 +14,7 @@ jobs:
           repository: 'startuip/NapCatQQ'
           submodules: true
           ref: main
-          token: ${{ secrets.NAPCAT_BUILD }}
+          token: ${{ github.token }}
     - name: Use Node.js 20.X
       uses: actions/setup-node@v4
       with:
@@ -41,7 +41,7 @@ jobs:
                 repository: 'startuip/NapCatQQ'
                 submodules: true
                 ref: main
-                token: ${{ secrets.NAPCAT_BUILD }}
+                token: ${{ github.token }}
         - name: Use Node.js 20.X
           uses: actions/setup-node@v4
           with:
