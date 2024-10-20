@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://socialify.git.ci/NapNeko/NapCatQQ/image?description=1&font=Jost&language=1&logo=https%3A%2F%2Fnapneko.github.io%2Fassets%2Flogo.png&name=1&owner=1&stargazers=1&theme=Auto" alt="NapCatQQ" width="640" height="320" />
+  <img src="https://socialify.git.ci/NapNeko/NapCatQQ/image?font=Jost&logo=https%3A%2F%2Fnapneko.github.io%2Fassets%2Flogo.png&name=1&owner=1&pattern=Diagonal%20Stripes&stargazers=1&theme=Auto" alt="NapCatQQ" width="640" height="320" />
 </div>
 
 ---
@@ -20,7 +20,16 @@ NapCatQQ (aka 猫猫框架) 是现代化的基于 NTQQ 的 Bot 协议端实现
 
 可前往 [Release](https://github.com/NapNeko/NapCatQQ/releases/) 页面下载最新版本
 
-**首次使用**请务必前往[官方文档](https://napneko.github.io/)查看使用教程
+**首次使用**请务必查看如下文档看使用教程
+
+### 文档地址
+[Github.IO](https://napneko.github.io/)
+
+[Cloudflare.Worker](https://doc.napneko.icu/)
+
+[Cloudflare.HKServer](https://napcat.napneko.icu/)
+
+[Cloudflare.Pages](https://napneko.pages.dev/)
 
 ## 回家旅途
 [QQ Group](https://qm.qq.com/q/VfjAq5HIMS)
