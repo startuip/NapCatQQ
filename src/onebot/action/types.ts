@@ -17,6 +17,7 @@ export enum ActionName {
     // 以下为扩展napcat扩展
     Unknown = 'unknown',
     GroupPoke = 'group_poke',
+    FriendPoke = 'friend_poke',
     SharePeer = 'ArkSharePeer',
     ShareGroupEx = 'ArkShareGroup',
     RebootNormal = 'reboot_normal',//无快速登录重新启动
@@ -126,5 +127,5 @@ export enum ActionName {
     GetRkey = "nc_get_rkey",
     SetSpecialTittle = "set_group_special_title",
     // UploadForwardMsg = "upload_forward_msg",
-    GetGroupShutList = "get_goup_shut_list",
+    GetGroupShutList = "get_group_shut_list",
 }

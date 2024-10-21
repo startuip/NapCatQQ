@@ -6,6 +6,7 @@ import {
     GroupNotifyMsgStatus,
     GroupNotifyMsgType,
     InstanceContext,
+    MsgSourceType,
     NapCatCore,
     NodeIKernelBuddyListener,
     NodeIKernelGroupListener,
@@ -303,8 +304,10 @@ export class NapCatOneBot11Adapter {
                     },
                     m.msgId,
                 );
-                await this.emitMsg(m)
-                    .catch(e => this.context.logger.logError.bind(this.context.logger)('处理消息失败', e));
+                // if (m.sourceType == MsgSourceType.K_DOWN_SOURCETYPE_AIOINNER) {
+                    await this.emitMsg(m)
+                        .catch(e => this.context.logger.logError.bind(this.context.logger)('处理消息失败', e));
+                // }
             }
         };
 
