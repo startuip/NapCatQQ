@@ -16,8 +16,8 @@ export interface OB11Message {
     message_id: number,
     message_seq: number, // 和message_id一样
     real_id: number,
-    user_id: number,
-    group_id?: number,
+    user_id: number | string, // number
+    group_id?: number | string, // number
     message_type: 'private' | 'group',
     sub_type?: 'friend' | 'group' | 'normal',
     sender: OB11Sender,
@@ -149,9 +149,14 @@ export interface OB11MessageNode {
     type: OB11MessageDataType.node;
     data: {
         id?: string
-        user_id?: number
+        user_id?: number | string  // number
         nickname: string
         content: OB11MessageMixType
+        source?: string,
+        news?: { text: string }[],
+        summary?: string,
+        prompt?: string
+        time?: string
     };
 }
 
@@ -221,10 +226,11 @@ export interface OB11PostSendMsg {
     message: OB11MessageMixType;
     messages?: OB11MessageMixType;  // 兼容 go-cqhttp
     auto_escape?: boolean | string
-    source?: string, 
-    news?: { text: string }[], 
-    summary?: string, 
+    source?: string,
+    news?: { text: string }[],
+    summary?: string,
     prompt?: string
+    time?: string
 }
 export interface OB11PostContext {
     message_type?: 'private' | 'group'
