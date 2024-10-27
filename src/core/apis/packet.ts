@@ -49,7 +49,7 @@ export class NTQQPacketApi {
                 .then()
                 .catch(this.core.context.logger.logError.bind(this.core.context.logger));
         } else {
-            this.core.context.logger.logWarn('PacketServer is not set, will not init NapCat.Packet!');
+            this.core.context.logger.logWarn('PacketServer未配置，NapCat.Packet将不会加载！');
         }
     }
 
@@ -62,7 +62,10 @@ export class NTQQPacketApi {
         this.qqVersion = qqversion;
         const offsetTable: OffsetType = offset;
         const table = offsetTable[qqversion + '-' + os.arch()];
-        if (!table) return false;
+        if (!table) {
+            this.logger.logError('PacketServer Offset table not found for QQVersion: ', qqversion + '-' + os.arch());
+            return false;
+        }
         const url = 'ws://' + this.serverUrl + '/ws';
         this.packetSession = new PacketSession(this.core.context.logger, new PacketClient(url, this.core));
         const cb = () => {
@@ -103,7 +106,7 @@ export class NTQQPacketApi {
         let status = 0;
         try {
             const packet = this.packetSession?.packer.packStatusPacket(uin);
-            const ret = await this.sendOidbPacket( packet!, true);
+            const ret = await this.sendOidbPacket(packet!, true);
             const data = Buffer.from(ret.hex_data, 'hex');
             const ext = new NapProtoMsg(OidbSvcTrpcTcp0XFE1_2RSP).decode(new NapProtoMsg(OidbSvcTrpcTcpBase).decode(data).body).data.status.value;
             // ext & 0xff00 + ext >> 16 & 0xff
@@ -146,7 +149,7 @@ export class NTQQPacketApi {
                         peerUid: groupUin ? String(groupUin) : this.core.selfInfo.uid
                     }, e));
                 }
-                if (e instanceof PacketMsgFileElement){
+                if (e instanceof PacketMsgFileElement) {
                     reqList.push(this.packetSession?.highwaySession.uploadFile({
                         chatType: groupUin ? ChatType.KCHATTYPEGROUP : ChatType.KCHATTYPEC2C,
                         peerUid: groupUin ? String(groupUin) : this.core.selfInfo.uid
@@ -155,10 +158,10 @@ export class NTQQPacketApi {
             }
         }
         const res = await Promise.allSettled(reqList);
-        this.logger.log(`上传资源${res.length}个， 失败${res.filter(r => r.status === 'rejected').length}个`);
+        this.logger.log(`上传资源${res.length}个，失败${res.filter(r => r.status === 'rejected').length}个`);
         res.forEach((result, index) => {
             if (result.status === 'rejected') {
-                this.logger.logError(`第${index + 1}个失败：${result.reason}`);
+                this.logger.logError(`上传第${index + 1}个资源失败：${result.reason}`);
             }
         });
     }
