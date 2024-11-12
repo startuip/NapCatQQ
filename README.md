@@ -9,14 +9,12 @@
 NapCatQQ (aka 猫猫框架) 是现代化的基于 NTQQ 的 Bot 协议端实现
 
 ## 猫猫技能
-- [x] **超高性能**：轻松数千群聊 独创消息队列
 - [x] **启动方式**：支持以无头、LiteLoader 插件、仅 QQ GUI 三种方式启动
 - [x] **覆盖平台**: 覆盖 Windows / Linux (可选 Docker) / Android Termux / MacOS
 - [x] **安装简单**: 支持一键脚本/程序自动部署/镜像部署等多种覆盖范围
 - [x] **超低占用**：无头模式占用资源极低，适合在服务器上运行
 - [x] **超多接口**：实现大部分 OneBot 和 go-cqhttp 接口，超多扩展 API
 - [x] **远程管理**：自带 WebUI 支持，远程管理更加便捷
-- [x] **扩展支持**：基于 MoeHoo 的Native 可实现发包与收包
 
 ## 使用猫猫
 
@@ -25,7 +23,6 @@ NapCatQQ (aka 猫猫框架) 是现代化的基于 NTQQ 的 Bot 协议端实现
 **首次使用**请务必查看如下文档看使用教程
 
 ### 文档地址
-[Github.IO](https://napneko.github.io/)
 
 [Cloudflare.Worker](https://doc.napneko.icu/)
 
@@ -33,6 +30,11 @@ NapCatQQ (aka 猫猫框架) 是现代化的基于 NTQQ 的 Bot 协议端实现
 
 [Cloudflare.Pages](https://napneko.pages.dev/)
 
+[Server.China](https://napneko.com/)
+
+[Server.Other](https://napcat.cyou/)
+
+[Github.IO](https://napneko.github.io/)
 ## 回家旅途
 [QQ Group](https://qm.qq.com/q/VfjAq5HIMS)
 

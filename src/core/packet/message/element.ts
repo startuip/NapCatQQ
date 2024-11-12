@@ -1,5 +1,5 @@
 import * as zlib from "node:zlib";
-import { NapProtoEncodeStructType, NapProtoMsg } from "@/core/packet/proto/NapProto";
+import { NapProtoEncodeStructType, NapProtoMsg } from "@napneko/nap-proto-core";
 import {
     CustomFace,
     Elem,
@@ -25,7 +25,7 @@ import {
     SendVideoElement
 } from "@/core";
 import { MsgInfo } from "@/core/packet/proto/oidb/common/Ntv2.RichMediaReq";
-import { PacketMsg, PacketSendMsgElement } from "@/core/packet/msg/message";
+import { PacketMsg, PacketSendMsgElement } from "@/core/packet/message/message";
 import { ForwardMsgBuilder } from "@/common/forward-msg-builder";
 import { FileExtra, GroupFileExtra } from "@/core/packet/proto/message/component";
 import { OidbSvcTrpcTcp0XE37_800Response } from "@/core/packet/proto/oidb/Oidb.0XE37_800";
@@ -241,7 +241,7 @@ export class PacketMsgMarkFaceElement extends IPacketMsgElement<SendMarketFaceEl
     }
 
     toPreview(): string {
-        return `[${this.emojiName}]`;
+        return `${this.emojiName}`;
     }
 }
 

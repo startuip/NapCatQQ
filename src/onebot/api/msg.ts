@@ -24,7 +24,6 @@ import {
     OB11MessageData,
     OB11MessageDataType,
     OB11MessageFileBase,
-    OB11MessageForward,
 } from '@/onebot';
 import { OB11Entities } from '@/onebot/entities';
 import { EventType } from '@/onebot/event/OB11BaseEvent';
@@ -120,7 +119,7 @@ export class OneBotMsgApi {
                         url: await this.core.apis.FileApi.getImageUrl(element),
                         path: element.filePath,
                         file_size: element.fileSize,
-                        file_unique: element.fileName
+                        file_unique: element.md5HexStr ?? element.fileName,
                     },
                 };
             } catch (e: any) {
@@ -141,9 +140,9 @@ export class OneBotMsgApi {
                     file: element.fileName,
                     path: element.filePath,
                     url: pathToFileURL(element.filePath).href,
-                    file_id: FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid,"." + element.fileName),
+                    file_id: FileNapCatOneBotUUID.encode(peer, msg.msgId, elementWrapper.elementId, element.fileUuid, "." + element.fileName),
                     file_size: element.fileSize,
-                    file_unique: element.fileName,
+                    file_unique: element.fileMd5 ?? element.fileSha ?? element.fileName,
                 },
             };
         },
@@ -204,7 +203,7 @@ export class OneBotMsgApi {
                 guildId: '',
             };
             if (!records || !element.replyMsgTime || !element.senderUidStr) {
-                this.core.context.logger.logError.bind(this.core.context.logger)('获取不到引用的消息', element.replayMsgSeq);
+                this.core.context.logger.logError.bind(this.core.context.logger)('似乎是旧版客户端,获取不到引用的消息', element.replayMsgSeq);
                 return null;
             }
 
@@ -218,11 +217,41 @@ export class OneBotMsgApi {
             if (records.peerUin === '284840486' || records.peerUin === '1094950020') {
                 return createReplyData(records.msgId);
             }
-            const replyMsg = (await this.core.apis.MsgApi.queryMsgsWithFilterExWithSeqV2(peer, element.replayMsgSeq, element.replyMsgTime, [element.senderUidStr]))
-                .msgList.find(msg => msg.msgRandom === records.msgRandom);
+            let replyMsgList = (await this.core.apis.MsgApi.queryMsgsWithFilterExWithSeqV2(peer, element.replayMsgSeq, records.msgTime, [element.senderUidStr])).msgList;
+            let replyMsg = replyMsgList.find(msg => msg.msgRandom === records.msgRandom);
 
             if (!replyMsg || records.msgRandom !== replyMsg.msgRandom) {
-                this.core.context.logger.logError.bind(this.core.context.logger)('获取不到引用的消息', element.replayMsgSeq);
+                this.core.context.logger.logError.bind(this.core.context.logger)(
+                    '筛选结果,筛选消息失败,将使用Fallback-1 Seq: ',
+                    element.replayMsgSeq,
+                    ',消息长度:',
+                    replyMsgList.length
+                );
+                replyMsgList = (await this.core.apis.MsgApi.getMsgsBySeqAndCount(peer, element.replayMsgSeq, 1, true, true)).msgList;
+                replyMsg = replyMsgList.find(msg => msg.msgRandom === records.msgRandom);
+            }
+
+            if (!replyMsg || records.msgRandom !== replyMsg.msgRandom) {
+                this.core.context.logger.logWarn.bind(this.core.context.logger)(
+                    '筛选消息失败,将使用Fallback-2 Seq:',
+                    element.replayMsgSeq,
+                    ',消息长度:',
+                    replyMsgList.length
+                );
+                replyMsgList = (await this.core.apis.MsgApi.queryMsgsWithFilterExWithSeqV3(peer, element.replayMsgSeq, [element.senderUidStr])).msgList;
+                replyMsg = replyMsgList.find(msg => msg.msgRandom === records.msgRandom);
+            }
+
+
+
+            // 丢弃该消息段
+            if (!replyMsg || records.msgRandom !== replyMsg.msgRandom) {
+                this.core.context.logger.logError.bind(this.core.context.logger)(
+                    '最终筛选结果,筛选消息失败,获取不到引用的消息 Seq: ',
+                    element.replayMsgSeq,
+                    ',消息长度:',
+                    replyMsgList.length
+                );
                 return null;
             }
             return createReplyData(replyMsg.msgId);
@@ -285,7 +314,7 @@ export class OneBotMsgApi {
                     url: videoDownUrl ?? pathToFileURL(element.filePath).href,
                     file_id: fileCode,
                     file_size: element.fileSize,
-                    file_unique: element.fileName,
+                    file_unique: element.videoMd5 ?? element.thumbMd5 ?? element.fileName,
                 },
             };
         },
@@ -305,17 +334,17 @@ export class OneBotMsgApi {
                     url: pathToFileURL(element.filePath).href,
                     file_id: fileCode,
                     file_size: element.fileSize,
-                    file_unique: element.fileName
+                    file_unique: element.fileUuid
                 },
             };
         },
 
         multiForwardMsgElement: async (_, msg) => {
-            const message_data: OB11MessageForward = {
-                data: {} as any,
-                type: OB11MessageDataType.forward,
-            };
-            message_data.data.id = msg.msgId;
+            // const message_data: OB11MessageForward = {
+            //     data: {} as any,
+            //     type: OB11MessageDataType.forward,
+            // };
+            // message_data.data.id = msg.msgId;
             const parentMsgPeer = msg.parentMsgPeer ?? {
                 chatType: msg.chatType,
                 guildId: '',
@@ -466,6 +495,7 @@ export class OneBotMsgApi {
             },
         }) => ({
             elementType: ElementType.MFACE,
+            elementId: '',
             marketFaceElement: {
                 emojiPackageId: emoji_package_id,
                 emojiId: emoji_id,
@@ -625,13 +655,13 @@ export class OneBotMsgApi {
         [OB11MessageDataType.miniapp]: async () => undefined,
 
         [OB11MessageDataType.contact]: async ({ data: { type = "qq", id } }, context) => {
-            if(type === "qq"){
+            if (type === "qq") {
                 const arkJson = await this.core.apis.UserApi.getBuddyRecommendContactArkJson(id.toString(), '');
                 return this.ob11ToRawConverters.json({
                     data: { data: arkJson.arkMsg },
                     type: OB11MessageDataType.json
                 }, context);
-            }else if(type === "group"){
+            } else if (type === "group") {
                 const arkJson = await this.core.apis.GroupApi.getGroupRecommendContactArkJson(id.toString());
                 return this.ob11ToRawConverters.json({
                     data: { data: arkJson.arkJson },
@@ -726,9 +756,12 @@ export class OneBotMsgApi {
             async (element) => {
                 for (const key in element) {
                     if (keyCanBeParsed(key, this.rawToOb11Converters) && element[key]) {
-                        const parsedElement = await this.rawToOb11Converters[key]?.(
-                            // eslint-disable-next-line
-                            // @ts-ignore
+                        const converters = this.rawToOb11Converters[key] as (
+                            element: Exclude<MessageElement[keyof RawToOb11Converters], null | undefined>,
+                            msg: RawMessage,
+                            elementWrapper: MessageElement,
+                        ) => PromiseLike<OB11MessageData | null>;
+                        const parsedElement = await converters?.(
                             element[key],
                             msg,
                             element,
@@ -777,9 +810,11 @@ export class OneBotMsgApi {
             if (ignoreTypes.includes(sendMsg.type)) {
                 continue;
             }
-            const callResult = this.ob11ToRawConverters[sendMsg.type](
-                // eslint-disable-next-line
-                // @ts-ignore
+            const converter = this.ob11ToRawConverters[sendMsg.type] as (
+                sendMsg: Extract<OB11MessageData, { type: OB11MessageData['type'] }>,
+                context: MessageContext,
+            ) => Promise<SendMessageElement | undefined>;
+            const callResult = converter(
                 sendMsg,
                 { peer, deleteAfterSentFiles },
             )?.catch(undefined);

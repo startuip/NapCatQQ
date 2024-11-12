@@ -12,13 +12,13 @@ import {
 import { GeneralCallResult } from '@/core/services/common';
 
 export interface NodeIKernelGroupService {
-    // ---> 
+    // --->
     // 待启用 For Next Version 3.2.0
     // isTroopMember ? 0 : 111
     getGroupMemberMaxNum(groupCode: string, serviceType: number): Promise<unknown>;
 
     getAllGroupPrivilegeFlag(troopUinList: string[], serviceType: number): Promise<unknown>;
-    // <--- 
+    // <---
     getGroupExt0xEF0Info(enableGroupCodes: string[], bannedGroupCodes: string[], filter: GroupExt0xEF0InfoFilter, forceFetch: boolean):
         Promise<GeneralCallResult & { result: { groupExtInfos: Map<string, any> } }>;
 
@@ -105,13 +105,13 @@ export interface NodeIKernelGroupService {
                 uid: string,
                 index: number//0
             }>,
-            infos: unknown,
+            infos: Map<string, GroupMember>,
             finish: true,
             hasRobot: false
         }
     }>;
 
-    setHeader(uid: string, path: string): unknown;
+    setHeader(uid: string, path: string): Promise<GeneralCallResult>;
 
     addKernelGroupListener(listener: NodeIKernelGroupListener): number;
 
@@ -232,7 +232,8 @@ export interface NodeIKernelGroupService {
 
     getGroupStatisticInfo(groupCode: string): unknown;
 
-    getGroupRemainAtTimes(groupCode: string): Promise<GeneralCallResult & {
+    getGroupRemainAtTimes(groupCode: string): Promise<Omit<GeneralCallResult, 'result'> & {
+        errCode: number,
         atInfo: {
             canAtAll: boolean
             RemainAtAllCountForUin: number

@@ -16,11 +16,8 @@ export class GoCQHTTPGetGroupAtAllRemain extends BaseAction<Payload, any> {
     payloadSchema = SchemaData;
 
     async _handle(payload: Payload) {
-        let ret = await this.core.apis.GroupApi.getGroupRemainAtTimes(payload.group_id.toString());
-        if (!ret.atInfo || ret.result !== 0) {
-            throw new Error('atInfo not found');
-        }
-        let data = {
+        const ret = await this.core.apis.GroupApi.getGroupRemainAtTimes(payload.group_id.toString());
+        const data = {
             can_at_all: ret.atInfo.canAtAll,
             remain_at_all_count_for_group: ret.atInfo.RemainAtAllCountForGroup,
             remain_at_all_count_for_uin: ret.atInfo.RemainAtAllCountForUin

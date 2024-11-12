@@ -1,31 +1,35 @@
 import * as zlib from "node:zlib";
 import * as crypto from "node:crypto";
 import { computeMd5AndLengthWithLimit } from "@/core/packet/utils/crypto/hash";
-import { NapProtoMsg } from "@/core/packet/proto/NapProto";
+import { NapProtoEncodeStructType, NapProtoMsg } from "@napneko/nap-proto-core";
 import { OidbSvcTrpcTcpBase } from "@/core/packet/proto/oidb/OidbBase";
 import { OidbSvcTrpcTcp0X9067_202 } from "@/core/packet/proto/oidb/Oidb.0x9067_202";
 import { OidbSvcTrpcTcp0X8FC_2, OidbSvcTrpcTcp0X8FC_2_Body } from "@/core/packet/proto/oidb/Oidb.0x8FC_2";
 import { OidbSvcTrpcTcp0XFE1_2 } from "@/core/packet/proto/oidb/Oidb.0XFE1_2";
 import { OidbSvcTrpcTcp0XED3_1 } from "@/core/packet/proto/oidb/Oidb.0xED3_1";
-import { NTV2RichMediaReq } from "@/core/packet/proto/oidb/common/Ntv2.RichMediaReq";
+import { IndexNode, NTV2RichMediaReq } from "@/core/packet/proto/oidb/common/Ntv2.RichMediaReq";
 import { HttpConn0x6ff_501 } from "@/core/packet/proto/action/action";
 import { LongMsgResult, SendLongMsgReq } from "@/core/packet/proto/message/action";
-import { PacketMsgBuilder } from "@/core/packet/msg/builder";
+import { PacketMsgBuilder } from "@/core/packet/message/builder";
 import {
     PacketMsgFileElement,
     PacketMsgPicElement,
     PacketMsgPttElement,
     PacketMsgVideoElement
-} from "@/core/packet/msg/element";
+} from "@/core/packet/message/element";
 import { LogWrapper } from "@/common/log";
-import { PacketMsg } from "@/core/packet/msg/message";
+import { PacketMsg } from "@/core/packet/message/message";
 import { OidbSvcTrpcTcp0x6D6 } from "@/core/packet/proto/oidb/Oidb.0x6D6";
 import { OidbSvcTrpcTcp0XE37_1200 } from "@/core/packet/proto/oidb/Oidb.0xE37_1200";
-import { PacketMsgConverter } from "@/core/packet/msg/converter";
-import { PacketClient } from "@/core/packet/client";
+import { PacketMsgConverter } from "@/core/packet/message/converter";
 import { OidbSvcTrpcTcp0XE37_1700 } from "@/core/packet/proto/oidb/Oidb.0xE37_1700";
 import { OidbSvcTrpcTcp0XE37_800 } from "@/core/packet/proto/oidb/Oidb.0XE37_800";
 import { OidbSvcTrpcTcp0XEB7 } from "./proto/oidb/Oidb.0xEB7";
+import { MiniAppReqParams } from "@/core/packet/entities/miniApp";
+import { MiniAppAdaptShareInfoReq } from "@/core/packet/proto/action/miniAppAdaptShareInfo";
+import { AIVoiceChatType } from "@/core/packet/entities/aiChat";
+import { OidbSvcTrpcTcp0X929B_0, OidbSvcTrpcTcp0X929D_0 } from "@/core/packet/proto/oidb/Oidb.0x929";
+import { PacketClient } from "@/core/packet/client/client";
 
 export type PacketHexStr = string & { readonly hexNya: unique symbol };
 
@@ -694,6 +698,37 @@ export class PacketPacker {
         );
     }
 
+    packGroupPttFileDownloadReq(groupUin: number, node: NapProtoEncodeStructType<typeof IndexNode>): OidbPacket {
+        return this.packOidbPacket(0x126E, 200, new NapProtoMsg(NTV2RichMediaReq).encode({
+            reqHead: {
+                common: {
+                    requestId: 4,
+                    command: 200
+                },
+                scene: {
+                    requestType: 1,
+                    businessType: 3,
+                    sceneType: 2,
+                    group: {
+                        groupUin: groupUin
+                    }
+                },
+                client: {
+                    agentType: 2
+                }
+            },
+            download: {
+                node: node,
+                download: {
+                    video: {
+                        busiType: 0,
+                        sceneType: 0,
+                    }
+                }
+            }
+        }), true, false);
+    }
+
     packGroupSignReq(uin: string, groupCode: string): OidbPacket {
         return this.packOidbPacket(0XEB7, 1, new NapProtoMsg(OidbSvcTrpcTcp0XEB7).encode(
             {
@@ -704,5 +739,65 @@ export class PacketPacker {
                 }
             }
         ), false, false);
+    }
+
+    packMiniAppAdaptShareInfo(req: MiniAppReqParams): PacketHexStr {
+        return this.packetPacket(
+            new NapProtoMsg(MiniAppAdaptShareInfoReq).encode(
+                {
+                    appId: req.sdkId,
+                    body: {
+                        extInfo: {
+                            field2: Buffer.alloc(0)
+                        },
+                        appid: req.appId,
+                        title: req.title,
+                        desc: req.desc,
+                        time: BigInt(Date.now()),
+                        scene: req.scene,
+                        templateType: req.templateType,
+                        businessType: req.businessType,
+                        picUrl: req.picUrl,
+                        vidUrl: "",
+                        jumpUrl: req.jumpUrl,
+                        iconUrl: req.iconUrl,
+                        verType: req.verType,
+                        shareType: req.shareType,
+                        versionId: req.versionId,
+                        withShareTicket: req.withShareTicket,
+                        webURL: "",
+                        appidRich: Buffer.alloc(0),
+                        template: {
+                            templateId: "",
+                            templateData: ""
+                        },
+                        field20: ""
+                    }
+                }
+            )
+        );
+    }
+
+    packFetchAiVoiceListReq(groupUin: number, chatType: AIVoiceChatType): OidbPacket {
+        return this.packOidbPacket(0x929D, 0,
+            new NapProtoMsg(OidbSvcTrpcTcp0X929D_0).encode({
+                groupUin: groupUin,
+                chatType: chatType
+            })
+        );
+    }
+
+    packAiVoiceChatReq(groupUin: number, voiceId: string, text: string, chatType: AIVoiceChatType, sessionId: number): OidbPacket {
+        return this.packOidbPacket(0x929B, 0,
+            new NapProtoMsg(OidbSvcTrpcTcp0X929B_0).encode({
+                groupUin: groupUin,
+                voiceId: voiceId,
+                text: text,
+                chatType: chatType,
+                session: {
+                    sessionId: sessionId
+                }
+            })
+        );
     }
 }

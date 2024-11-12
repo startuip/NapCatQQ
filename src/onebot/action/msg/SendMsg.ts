@@ -11,9 +11,10 @@ import { decodeCQCode } from '@/onebot/cqcode';
 import { MessageUnique } from '@/common/message-unique';
 import { ChatType, ElementType, NapCatCore, Peer, RawMessage, SendArkElement, SendMessageElement } from '@/core';
 import BaseAction from '../BaseAction';
-import { rawMsgWithSendMsg } from "@/core/packet/msg/converter";
-import { PacketMsg } from "@/core/packet/msg/message";
+import { rawMsgWithSendMsg } from "@/core/packet/message/converter";
+import { PacketMsg } from "@/core/packet/message/message";
 import { ForwardMsgBuilder } from "@/common/forward-msg-builder";
+import { stringifyWithBigInt } from "@/common/helper";
 
 export interface ReturnDataType {
     message_id: number;
@@ -168,14 +169,14 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
                 logger.logWarn('转发消息深度超过3层，将停止解析！');
                 break;
             }
-            if ((node.data.id && typeof node.data.content !== "string") || !node.data.id) {
+            if (!node.data.id) {
                 const OB11Data = normalize(node.type === OB11MessageDataType.node ? node.data.content : node);
                 let sendElements: SendMessageElement[];
 
-                if (getSpecialMsgNum({message: OB11Data}, OB11MessageDataType.node)) {
+                if (getSpecialMsgNum({ message: OB11Data }, OB11MessageDataType.node)) {
                     const uploadReturnData = await this.uploadForwardedNodesPacket(msgPeer, OB11Data as OB11MessageNode[], node.data.source, node.data.news, node.data.summary, node.data.prompt, {
-                        user_id: node.data.user_id?.toString() ?? parentMeta?.user_id ?? this.core.selfInfo.uin,
-                        nickname: node.data.nickname ?? parentMeta?.nickname ?? "QQ用户",
+                        user_id: (node.data.user_id || node.data.uin)?.toString() ?? parentMeta?.user_id ?? this.core.selfInfo.uin,
+                        nickname: (node.data.nickname || node.data.name) ?? parentMeta?.nickname ?? "QQ用户",
                     }, dp + 1);
                     sendElements = uploadReturnData?.finallySendElements ? [uploadReturnData.finallySendElements] : [];
                 } else {
@@ -184,18 +185,31 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
                 }
 
                 const packetMsgElements: rawMsgWithSendMsg = {
-                    senderUin: Number(node.data.user_id ?? parentMeta?.user_id) || +this.core.selfInfo.uin,
-                    senderName: node.data.nickname ?? parentMeta?.nickname ?? "QQ用户",
+                    senderUin: Number((node.data.user_id || node.data.uin) ?? parentMeta?.user_id) || +this.core.selfInfo.uin,
+                    senderName: (node.data.nickname || node.data.name) ?? parentMeta?.nickname ?? "QQ用户",
                     groupId: msgPeer.chatType === ChatType.KCHATTYPEGROUP ? +msgPeer.peerUid : undefined,
                     time: Number(node.data.time) || Date.now(),
                     msg: sendElements,
                 };
-                logger.logDebug(`handleForwardedNodesPacket 开始转换 ${JSON.stringify(packetMsgElements)}`);
+                logger.logDebug(`handleForwardedNodesPacket[SendRaw] 开始转换 ${stringifyWithBigInt(packetMsgElements)}`);
                 const transformedMsg = this.core.apis.PacketApi.packetSession?.packer.packetConverter.rawMsgWithSendMsgToPacketMsg(packetMsgElements);
-                logger.logDebug(`handleForwardedNodesPacket 转换为 ${JSON.stringify(transformedMsg)}`);
+                logger.logDebug(`handleForwardedNodesPacket[SendRaw] 转换为 ${stringifyWithBigInt(transformedMsg)}`);
+                packetMsg.push(transformedMsg!);
+            } else if (node.data.id) {
+                const id = node.data.id;
+                const nodeMsg = MessageUnique.getMsgIdAndPeerByShortId(+id) || MessageUnique.getPeerByMsgId(id);
+                if (!nodeMsg) {
+                    logger.logError.bind(this.core.context.logger)('转发消息失败，未找到消息', id);
+                    continue;
+                }
+                const msg = (await this.core.apis.MsgApi.getMsgsByMsgId(nodeMsg.Peer, [nodeMsg.MsgId])).msgList[0];
+                logger.logDebug(`handleForwardedNodesPacket[PureRaw] 开始转换 ${stringifyWithBigInt(msg)}`);
+                await this.core.apis.FileApi.downloadRawMsgMedia([msg]);
+                const transformedMsg = this.core.apis.PacketApi.packetSession?.packer.packetConverter.rawMsgToPacketMsg(msg, msgPeer);
+                logger.logDebug(`handleForwardedNodesPacket[PureRaw] 转换为 ${stringifyWithBigInt(transformedMsg)}`);
                 packetMsg.push(transformedMsg!);
             } else {
-                logger.logDebug(`handleForwardedNodesPacket 跳过元素 ${JSON.stringify(node)}`);
+                logger.logDebug(`handleForwardedNodesPacket 跳过元素 ${stringifyWithBigInt(node)}`);
             }
         }
         if (packetMsg.length === 0) {
@@ -222,13 +236,12 @@ export class SendMsg extends BaseAction<OB11PostSendMsg, ReturnDataType> {
         message: RawMessage | null,
         res_id?: string
     }> {
-        let returnMsg: RawMessage | undefined, res_id: string | undefined;
         const uploadReturnData = await this.uploadForwardedNodesPacket(msgPeer, messageNodes, source, news, summary, prompt);
-        res_id = uploadReturnData?.res_id;
+        const res_id = uploadReturnData?.res_id;
         const finallySendElements = uploadReturnData?.finallySendElements;
         if (!finallySendElements) throw Error('转发消息失败，生成节点为空');
-        returnMsg = await this.obContext.apis.MsgApi.sendMsgWithOb11UniqueId(msgPeer, [finallySendElements], [], true).catch(_ => undefined);
-        return {message: returnMsg ?? null, res_id};
+        const returnMsg = await this.obContext.apis.MsgApi.sendMsgWithOb11UniqueId(msgPeer, [finallySendElements], [], true).catch(_ => undefined);
+        return { message: returnMsg ?? null, res_id };
     }
 
     private async handleForwardedNodes(destPeer: Peer, messageNodes: OB11MessageNode[]): Promise<{

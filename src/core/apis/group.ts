@@ -54,7 +54,9 @@ export class NTQQGroupApi {
         }, pskey);
     }
     async getGroupShutUpMemberList(groupCode: string) {
-        return this.context.session.getGroupService().getGroupShutUpMemberList(groupCode);
+        const data = this.core.eventWrapper.registerListen('NodeIKernelGroupListener/onShutUpMemberListChanged', 1, 1000, (group_id) => group_id === groupCode);
+        this.context.session.getGroupService().getGroupShutUpMemberList(groupCode);
+        return (await data)[1];
     }
     async clearGroupNotifiesUnreadCount(uk: boolean) {
         return this.context.session.getGroupService().clearGroupNotifiesUnreadCount(uk);
@@ -320,10 +322,10 @@ export class NTQQGroupApi {
         infos: Map<string, GroupMember>;
         finish: boolean;
         hasNext: boolean | undefined;
-    }>{
+    }> {
         const sceneId = this.context.session.getGroupService().createMemberListScene(groupQQ, 'groupMemberList_MainWindow_1');
         const once = this.core.eventWrapper.registerListen('NodeIKernelGroupListener/onMemberListChange', 0, timeout, (params) => params.sceneId === sceneId)
-            .catch(() => {});
+            .catch(() => { });
         const result = await this.context.session.getGroupService().getNextMemberList(sceneId, undefined, num);
         if (result.errCode !== 0) {
             throw new Error('获取群成员列表出错,' + result.errMsg);
@@ -337,27 +339,62 @@ export class NTQQGroupApi {
         }
         this.context.session.getGroupService().destroyMemberListScene(sceneId);
         return {
-            infos: resMode2?.infos || result.result.infos,
+            infos: new Map([...(resMode2?.infos ?? []), ...result.result.infos]),
             finish: result.result.finish,
             hasNext: resMode2?.hasNext,
         };
     }
 
-    async getGroupMembersV2(groupQQ: string, num = 3000): Promise<Map<string, GroupMember>> {
-        let res = await this.tryGetGroupMembersV2(true, groupQQ);
-        if (res.hasNext || !res.finish || res.infos.size === 0) {
-            res = await this.tryGetGroupMembersV2(false, groupQQ, num);
+    async GetGroupMembersV3(groupQQ: string, num = 3000, timeout = 2500): Promise<{
+        infos: Map<string, GroupMember>;
+        finish: boolean;
+        hasNext: boolean | undefined;
+        listenerMode: boolean;
+    }> {
+        const sceneId = this.context.session.getGroupService().createMemberListScene(groupQQ, 'groupMemberList_MainWindow_1');
+        const once = this.core.eventWrapper.registerListen('NodeIKernelGroupListener/onMemberListChange', 0, timeout, (params) => params.sceneId === sceneId)
+            .catch(() => { });
+        const result = await this.context.session.getGroupService().getNextMemberList(sceneId, undefined, num);
+        if (result.errCode !== 0) {
+            throw new Error('获取群成员列表出错,' + result.errMsg);
         }
-        if ((res.infos.size === 0 || res.infos.size === 30) && res.finish) {
-            res = await this.tryGetGroupMembersV2(true, groupQQ, num);
+        let resMode2;
+        if (result.result.finish && result.result.infos.size === 0) {
+            const ret = (await once)?.[0];
+            if (ret) {
+                resMode2 = ret;
+            }
         }
-        return res.infos;
+        this.context.session.getGroupService().destroyMemberListScene(sceneId);
+        //console.log('GetGroupMembersV3 len :', result.result.infos.size, resMode2?.infos.size, groupQQ);
+        return {
+            infos: new Map([...(resMode2?.infos ?? []), ...result.result.infos]),
+            finish: result.result.finish,
+            hasNext: resMode2?.hasNext,
+            listenerMode: resMode2?.hasNext !== undefined ? true : false
+        };
+    }
+
+    async getGroupMembersV2(groupQQ: string, num = 3000, no_cache: boolean = false): Promise<Map<string, GroupMember>> {
+        if (no_cache) {
+            return (await this.getGroupMemberAll(groupQQ, true)).result.infos;
+        }
+        let res = await this.GetGroupMembersV3(groupQQ, num);
+        let ret = res.infos;
+        if (res.infos.size === 0 && !res.listenerMode) {
+            res = await this.GetGroupMembersV3(groupQQ, num);
+            ret = res.infos;
+        }
+        if (res.infos.size === 0) {
+            ret = (await this.getGroupMemberAll(groupQQ)).result.infos;
+        }
+        return ret;
     }
 
     async getGroupMembers(groupQQ: string, num = 3000): Promise<Map<string, GroupMember>> {
         const groupService = this.context.session.getGroupService();
         const sceneId = groupService.createMemberListScene(groupQQ, 'groupMemberList_MainWindow');
-        const result = await groupService.getNextMemberList(sceneId!, undefined, num);
+        const result = await groupService.getNextMemberList(sceneId, undefined, num);
         if (result.errCode !== 0) {
             throw new Error('获取群成员列表出错,' + result.errMsg);
         }
@@ -365,8 +402,8 @@ export class NTQQGroupApi {
         return result.result.infos;
     }
 
-    async getGroupFileCount(Gids: Array<string>) {
-        return this.context.session.getRichMediaService().batchGetGroupFileCount(Gids);
+    async getGroupFileCount(group_ids: Array<string>) {
+        return this.context.session.getRichMediaService().batchGetGroupFileCount(group_ids);
     }
 
     async getArkJsonGroupShare(GroupCode: string) {

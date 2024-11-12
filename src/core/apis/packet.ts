@@ -1,23 +1,31 @@
+import * as crypto from 'crypto';
 import * as os from 'os';
 import { ChatType, InstanceContext, NapCatCore } from '..';
 import offset from '@/core/external/offset.json';
-import { PacketClient, RecvPacketData } from '@/core/packet/client';
 import { PacketSession } from "@/core/packet/session";
 import { OidbPacket, PacketHexStr } from "@/core/packet/packer";
-import { NapProtoMsg } from '@/core/packet/proto/NapProto';
+import { NapProtoMsg, NapProtoEncodeStructType, NapProtoDecodeStructType } from "@napneko/nap-proto-core";
 import { OidbSvcTrpcTcp0X9067_202_Rsp_Body } from '@/core/packet/proto/oidb/Oidb.0x9067_202';
 import { OidbSvcTrpcTcpBase, OidbSvcTrpcTcpBaseRsp } from '@/core/packet/proto/oidb/OidbBase';
 import { OidbSvcTrpcTcp0XFE1_2RSP } from '@/core/packet/proto/oidb/Oidb.0XFE1_2';
 import { LogWrapper } from "@/common/log";
 import { SendLongMsgResp } from "@/core/packet/proto/message/action";
-import { PacketMsg } from "@/core/packet/msg/message";
+import { PacketMsg } from "@/core/packet/message/message";
 import { OidbSvcTrpcTcp0x6D6Response } from "@/core/packet/proto/oidb/Oidb.0x6D6";
 import {
     PacketMsgFileElement,
     PacketMsgPicElement,
     PacketMsgPttElement,
     PacketMsgVideoElement
-} from "@/core/packet/msg/element";
+} from "@/core/packet/message/element";
+import { MiniAppReqParams, MiniAppRawData } from "@/core/packet/entities/miniApp";
+import { MiniAppAdaptShareInfoResp } from "@/core/packet/proto/action/miniAppAdaptShareInfo";
+import { AIVoiceChatType, AIVoiceItemList } from "@/core/packet/entities/aiChat";
+import { OidbSvcTrpcTcp0X929B_0Resp, OidbSvcTrpcTcp0X929D_0Resp } from "@/core/packet/proto/oidb/Oidb.0x929";
+import { IndexNode, MsgInfo } from "@/core/packet/proto/oidb/common/Ntv2.RichMediaReq";
+import { NTV2RichMediaResp } from "@/core/packet/proto/oidb/common/Ntv2.RichMediaResp";
+import { RecvPacketData } from "@/core/packet/client/client";
+import { napCatVersion } from "@/common/version";
 
 
 interface OffsetType {
@@ -33,7 +41,6 @@ export class NTQQPacketApi {
     context: InstanceContext;
     core: NapCatCore;
     logger: LogWrapper;
-    serverUrl: string | undefined;
     qqVersion: string | undefined;
     packetSession: PacketSession | undefined;
 
@@ -42,32 +49,28 @@ export class NTQQPacketApi {
         this.core = core;
         this.logger = core.context.logger;
         this.packetSession = undefined;
-        const config = this.core.configLoader.configData;
-        if (config && config.packetServer && config.packetServer.length > 0) {
-            const serverUrl = this.core.configLoader.configData.packetServer ?? '127.0.0.1:8086';
-            this.InitSendPacket(serverUrl, this.context.basicInfoWrapper.getFullQQVesion())
-                .then()
-                .catch(this.core.context.logger.logError.bind(this.core.context.logger));
-        } else {
-            this.core.context.logger.logWarn('PacketServer未配置，NapCat.Packet将不会加载！');
-        }
+        this.InitSendPacket(this.context.basicInfoWrapper.getFullQQVesion())
+            .then()
+            .catch(this.core.context.logger.logError.bind(this.core.context.logger));
     }
 
     get available(): boolean {
         return this.packetSession?.client.available ?? false;
     }
 
-    async InitSendPacket(serverUrl: string, qqversion: string) {
-        this.serverUrl = serverUrl;
+    async InitSendPacket(qqversion: string) {
         this.qqVersion = qqversion;
-        const offsetTable: OffsetType = offset;
-        const table = offsetTable[qqversion + '-' + os.arch()];
+        const table = typedOffset[qqversion + '-' + os.arch()];
         if (!table) {
-            this.logger.logError('PacketServer Offset table not found for QQVersion: ', qqversion + '-' + os.arch());
+            this.logger.logError(`[Core] [Packet] PacketBackend 不支持当前QQ版本架构：${qqversion}-${os.arch()}，
+            请参照 https://github.com/NapNeko/NapCatQQ/releases/tag/v${napCatVersion} 配置正确的QQ版本！`);
             return false;
         }
-        const url = 'ws://' + this.serverUrl + '/ws';
-        this.packetSession = new PacketSession(this.core.context.logger, new PacketClient(url, this.core));
+        if (this.core.configLoader.configData.packetBackend === 'disable') {
+            this.logger.logWarn('[Core] [Packet] 已禁用PacketBackend，NapCat.Packet将不会加载！');
+            return false;
+        }
+        this.packetSession = new PacketSession(this.core);
         const cb = () => {
             if (this.packetSession && this.packetSession.client) {
                 this.packetSession.client.init(process.pid, table.recv, table.send).then().catch(this.logger.logError.bind(this.logger));
@@ -184,5 +187,56 @@ export class NTQQPacketApi {
             throw new Error(`sendGroupFileDownloadReq error: ${resp.download.clientWording}`);
         }
         return `https://${resp.download.downloadDns}/ftn_handler/${Buffer.from(resp.download.downloadUrl).toString('hex')}/?fname=`;
+    }
+
+    async sendGroupPttFileDownloadReq(groupUin: number, node: NapProtoEncodeStructType<typeof IndexNode>) {
+        const data = this.packetSession?.packer.packGroupPttFileDownloadReq(groupUin, node);
+        const ret = await this.sendOidbPacket(data!, true);
+        const body = new NapProtoMsg(OidbSvcTrpcTcpBaseRsp).decode(Buffer.from(ret.hex_data, 'hex')).body;
+        const resp = new NapProtoMsg(NTV2RichMediaResp).decode(body);
+        const info = resp.download.info;
+        return `https://${info.domain}${info.urlPath}${resp.download.rKeyParam}`;
+    }
+
+    async sendMiniAppShareInfoReq(param: MiniAppReqParams) {
+        const data = this.packetSession?.packer.packMiniAppAdaptShareInfo(param);
+        const ret = await this.sendPacket("LightAppSvc.mini_app_share.AdaptShareInfo", data!, true);
+        const body = new NapProtoMsg(MiniAppAdaptShareInfoResp).decode(Buffer.from(ret.hex_data, 'hex'));
+        return JSON.parse(body.content.jsonContent) as MiniAppRawData;
+    }
+
+    async sendFetchAiVoiceListReq(groupUin: number, chatType: AIVoiceChatType) : Promise<AIVoiceItemList[] | null> {
+        const data = this.packetSession?.packer.packFetchAiVoiceListReq(groupUin, chatType);
+        const ret = await this.sendOidbPacket(data!, true);
+        const body = new NapProtoMsg(OidbSvcTrpcTcpBaseRsp).decode(Buffer.from(ret.hex_data, 'hex')).body;
+        const resp = new NapProtoMsg(OidbSvcTrpcTcp0X929D_0Resp).decode(body);
+        if (!resp.content) return null;
+        return resp.content.map((item) => {
+            return {
+                category: item.category,
+                voices: item.voices
+            };
+        });
+    }
+
+    async sendAiVoiceChatReq(groupUin: number, voiceId: string, text: string, chatType: AIVoiceChatType): Promise<NapProtoDecodeStructType<typeof MsgInfo>> {
+        let reqTime = 0;
+        const reqMaxTime = 30;
+        const sessionId = crypto.randomBytes(4).readUInt32BE(0);
+        while (true) {
+            if (reqTime >= reqMaxTime) {
+                throw new Error(`sendAiVoiceChatReq failed after ${reqMaxTime} times`);
+            }
+            reqTime++;
+            const data = this.packetSession?.packer.packAiVoiceChatReq(groupUin, voiceId, text, chatType, sessionId);
+            const ret = await this.sendOidbPacket(data!, true);
+            const body = new NapProtoMsg(OidbSvcTrpcTcpBase).decode(Buffer.from(ret.hex_data, 'hex'));
+            if (body.errorCode) {
+                throw new Error(`sendAiVoiceChatReq retCode: ${body.errorCode} error: ${body.errorMsg}`);
+            }
+            const resp = new NapProtoMsg(OidbSvcTrpcTcp0X929B_0Resp).decode(body.body);
+            if (!resp.msgInfo) continue;
+            return resp.msgInfo;
+        }
     }
 }
